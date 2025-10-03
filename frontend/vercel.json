@@ -21,7 +21,7 @@
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://your-backend-app.onrender.com"
+    "REACT_APP_API_URL": "https://luct-reporting2-2.onrender.com"
   },
   "buildCommand": "npm run build",
   "outputDirectory": "build"
