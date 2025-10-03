@@ -5,7 +5,7 @@
   "homepage": "https://luct-reporting.vercel.app",
   "scripts": {
     "start": "react-scripts start",
-    "build": "CI=false react-scripts build",
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -15,7 +15,8 @@
     "react-scripts": "5.0.1",
     "react-router-dom": "^6.8.1",
     "axios": "^1.4.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "web-vitals": "^3.3.2"
   },
   "browserslist": {
     "production": [
