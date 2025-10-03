@@ -16,24 +16,12 @@
       "dest": "/static/$1"
     },
     {
-      "src": "/favicon.ico",
-      "dest": "/favicon.ico"
-    },
-    {
-      "src": "/asset-manifest.json",
-      "dest": "/asset-manifest.json"
-    },
-    {
-      "src": "/manifest.json",
-      "dest": "/manifest.json"
-    },
-    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://luct-reporting-backend.onrender.com"
+    "REACT_APP_API_URL": "https://your-backend-app.onrender.com"
   },
   "buildCommand": "npm run build",
   "outputDirectory": "build"
