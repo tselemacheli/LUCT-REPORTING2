@@ -1,48 +1,61 @@
 import React, { createContext, useState, useEffect } from 'react';
-import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
+import api, { checkApiHealth } from './axiosConfig';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [apiStatus, setApiStatus] = useState('checking');
 
   useEffect(() => {
+    checkApiStatus();
     const token = localStorage.getItem('token');
-    if (token) {
+    const userData = localStorage.getItem('user');
+
+    if (token && userData) {
       try {
-        const decoded = jwtDecode(token);
-        if (decoded.exp * 1000 > Date.now()) {
-          setUser({ role: decoded.role, id: decoded.id });
-          localStorage.setItem('userId', decoded.id); // Store userId for lecturer ratings
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('userId');
-          delete axios.defaults.headers.common['Authorization'];
-          setUser(null);
-        }
-      } catch (err) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userId');
-        delete axios.defaults.headers.common['Authorization'];
-        setUser(null);
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        
+        // Verify token is still valid
+        api.get('/api/courses')
+          .catch(() => {
+            // Token is invalid, logout
+            logout();
+          });
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        logout();
       }
     }
+    
     setLoading(false);
   }, []);
+
+  const checkApiStatus = async () => {
+    const health = await checkApiHealth();
+    setApiStatus(health.status);
+  };
 
   const login = async (identifier, password) => {
     try {
       setLoading(true);
-      const res = await axios.post('http://localhost:5000/api/login', { identifier, password });
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('userId', jwtDecode(res.data.token).id); // Store userId
-      axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-      setUser({ role: res.data.role, id: jwtDecode(res.data.token).id });
-    } catch (err) {
-      throw err;
+      const response = await api.post('/api/login', { identifier, password });
+      
+      const { token, role, user: userInfo } = response.data;
+      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(userInfo));
+      localStorage.setItem('userRole', role);
+      
+      setUser(userInfo);
+      setApiStatus('healthy');
+      
+      return response.data;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -50,13 +63,23 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('userId');
-    delete axios.defaults.headers.common['Authorization'];
+    localStorage.removeItem('user');
+    localStorage.removeItem('userRole');
     setUser(null);
+    window.location.href = '/login';
+  };
+
+  const value = {
+    user,
+    login,
+    logout,
+    loading,
+    apiStatus,
+    checkApiStatus
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
