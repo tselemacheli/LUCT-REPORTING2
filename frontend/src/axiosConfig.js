@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   
   // If running on Vercel
   if (window.location.hostname.includes('vercel.app')) {
-    return 'https://luct-reporting-backend.onrender.com';
+    return 'https://luct-reporting2-2.onrender.com';
   }
   
   // Default to local development
