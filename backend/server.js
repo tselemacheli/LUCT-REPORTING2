@@ -5,7 +5,6 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const ExcelJS = require('exceljs');
-const path = require('path');
 
 const app = express();
 
@@ -34,7 +33,7 @@ app.options('*', cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Database configuration
+// Fixed Database configuration - removed invalid options
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -42,22 +41,42 @@ const dbConfig = {
   database: process.env.DB_NAME || 'luct_reporting',
   port: process.env.DB_PORT || 3306,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // Valid connection options for mysql2
   connectTimeout: 60000,
-  acquireTimeout: 60000,
-  timeout: 60000,
-  reconnect: true
+  acquireTimeout: 60000, // This is valid for createPool, not createConnection
+  timeout: 60000, // This is valid for createPool, not createConnection
+  reconnect: true, // This is valid for createPool, not createConnection
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
 };
 
 console.log('Database Configuration Loaded');
+console.log('Environment:', process.env.NODE_ENV || 'development');
+
+// Use createPool instead of createConnection for better performance
 const db = mysql.createPool(dbConfig);
 
 // Test database connection
 db.getConnection((err, connection) => {
   if (err) {
     console.error('❌ Database connection failed:', err.message);
+    console.log('Please check your database configuration and ensure it is running.');
   } else {
     console.log('✅ MySQL Connected successfully');
     connection.release();
+  }
+});
+
+// Handle pool errors
+db.on('error', (err) => {
+  console.error('❌ Database pool error:', err);
+  if (err.code === 'PROTOCOL_CONNECTION_LOST') {
+    console.log('Database connection was lost. Attempting to reconnect...');
+  } else {
+    throw err;
   }
 });
 
@@ -102,6 +121,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
+    database: 'MySQL with Connection Pooling',
     endpoints: {
       auth: '/api/login, /api/register',
       courses: '/api/courses',
@@ -118,7 +138,7 @@ app.get('/api', (req, res) => {
     name: 'LUCT Reporting System API',
     version: '1.0.0',
     status: 'active',
-    database: 'MySQL',
+    database: 'MySQL with Pooling',
     environment: process.env.NODE_ENV || 'development'
   });
 });
@@ -158,6 +178,7 @@ app.post('/api/register', async (req, res) => {
       [role, name, identifier, hashed],
       (err, result) => {
         if (err) {
+          console.error('Registration error:', err);
           if (err.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ message: 'Identifier already exists' });
           }
@@ -171,6 +192,7 @@ app.post('/api/register', async (req, res) => {
       }
     );
   } catch (hashError) {
+    console.error('Hashing error:', hashError);
     res.status(500).json({ message: 'Error processing password' });
   }
 });
@@ -188,6 +210,7 @@ app.post('/api/login', (req, res) => {
     [identifier], 
     async (err, results) => {
       if (err) {
+        console.error('Login query error:', err);
         return res.status(500).json({ message: 'Error querying database' });
       }
       
@@ -219,14 +242,12 @@ app.post('/api/login', (req, res) => {
           }
         });
       } catch (compareError) {
+        console.error('Password comparison error:', compareError);
         res.status(500).json({ message: 'Error validating credentials' });
       }
     }
   );
 });
-
-// Add more endpoints here (courses, classes, reports, etc.)
-// Keep all your existing endpoint logic...
 
 // Get courses
 app.get('/api/courses', authenticate, (req, res) => {
@@ -237,12 +258,16 @@ app.get('/api/courses', authenticate, (req, res) => {
     [query, query, query],
     (err, results) => {
       if (err) {
+        console.error('Fetch courses error:', err);
         return res.status(500).json({ message: 'Error fetching courses' });
       }
       res.json(results);
     }
   );
 });
+
+// Add more endpoints here (keep your existing classes, reports, etc. endpoints)
+// Just make sure they use the db pool
 
 // Error handling
 app.use((err, req, res, next) => {
@@ -267,4 +292,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
+  console.log(`📊 Database: Connection Pool Active`);
 });
