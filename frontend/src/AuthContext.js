@@ -10,7 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Use your Render deployment URL
-  const API_BASE_URL = "https://luct-reporting2-12.onrender.com/api";
+  const API_BASE_URL = "https://luct-reporting2-13.onrender.com/api";
 
   // --------------------------
   // Initialize user from token
