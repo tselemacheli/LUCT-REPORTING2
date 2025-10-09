@@ -46,12 +46,11 @@ const authenticate = (req, res, next) => {
   jwt.verify(token, SECRET, (err, user) => {
     if (err) return res.status(403).json({ message: 'Invalid or expired token' });
     req.user = user;
-    console.log('Authenticated user:', req.user);
     next();
   });
 };
 
-// Register endpoint (stores in users table)
+// Register endpoint (AuthContext: api.register)
 app.post('/api/register', async (req, res) => {
   const { name, password, identifier, role } = req.body;
   if (!name || !password || !identifier || !role) {
@@ -80,17 +79,17 @@ app.post('/api/register', async (req, res) => {
           if (err.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ message: 'Identifier already exists' });
           }
-          return res.status(500).json({ message: 'Error registering user', error: err.message });
+          return res.status(500).json({ message: 'Error registering user' });
         }
         res.json({ message: 'Registered successfully' });
       });
   } catch (hashError) {
     console.error('Hashing error:', hashError);
-    res.status(500).json({ message: 'Error processing password', error: hashError.message });
+    res.status(500).json({ message: 'Error processing password' });
   }
 });
 
-// Login endpoint (checks users table)
+// Login endpoint (AuthContext: api.login)
 app.post('/api/login', (req, res) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {
@@ -99,7 +98,7 @@ app.post('/api/login', (req, res) => {
   db.query('SELECT * FROM users WHERE identifier = ?', [identifier], async (err, results) => {
     if (err) {
       console.error('Login query error:', err);
-      return res.status(500).json({ message: 'Error querying database', error: err.message });
+      return res.status(500).json({ message: 'Error querying database' });
     }
     if (results.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
     const user = results[0];
@@ -110,19 +109,19 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-// Get lecturers (for Program Leader, queries users table)
+// Get lecturers (AuthContext: api.getLecturers)
 app.get('/api/lecturers', authenticate, (req, res) => {
   if (req.user.role !== 'pl') return res.status(403).json({ message: 'Forbidden: Only Program Leaders can access this' });
   db.query('SELECT id, name FROM users WHERE role = "lecturer"', (err, results) => {
     if (err) {
       console.error('Fetch lecturers error:', err);
-      return res.status(500).json({ message: 'Error fetching lecturers', error: err.message });
+      return res.status(500).json({ message: 'Error fetching lecturers' });
     }
     res.json(results);
   });
 });
 
-// Add course (Program Leader, inserts into courses table)
+// Add course (AuthContext: api.addCourse)
 app.post('/api/courses', authenticate, (req, res) => {
   if (req.user.role !== 'pl') return res.status(403).json({ message: 'Forbidden: Only Program Leaders can add courses' });
   const { name, code, facultyName } = req.body;
@@ -135,25 +134,25 @@ app.post('/api/courses', authenticate, (req, res) => {
       if (err.code === 'ER_DUP_ENTRY') {
         return res.status(400).json({ message: 'Course code already exists' });
       }
-      return res.status(500).json({ message: 'Error adding course', error: err.message });
+      return res.status(500).json({ message: 'Error adding course' });
     }
     res.json({ message: 'Course added successfully' });
   });
 });
 
-// Get courses (Program Leader, Principal Lecturer, queries courses table)
+// Get courses (AuthContext: api.getCourses)
 app.get('/api/courses', authenticate, (req, res) => {
   const query = req.query.search ? `%${req.query.search}%` : '%';
   db.query('SELECT * FROM courses WHERE name LIKE ? OR code LIKE ? OR faculty_name LIKE ?', [query, query, query], (err, results) => {
     if (err) {
       console.error('Fetch courses error:', err);
-      return res.status(500).json({ message: 'Error fetching courses', error: err.message });
+      return res.status(500).json({ message: 'Error fetching courses' });
     }
     res.json(results);
   });
 });
 
-// Add class (Program Leader, inserts into classes table)
+// Add class (AuthContext: api.addClass)
 app.post('/api/classes', authenticate, (req, res) => {
   if (req.user.role !== 'pl') return res.status(403).json({ message: 'Forbidden: Only Program Leaders can add classes' });
   const { name, courseId, lecturerId } = req.body;
@@ -166,13 +165,13 @@ app.post('/api/classes', authenticate, (req, res) => {
       if (err.code === 'ER_NO_REFERENCED_ROW') {
         return res.status(400).json({ message: 'Invalid course or lecturer ID' });
       }
-      return res.status(500).json({ message: 'Error adding class', error: err.message });
+      return res.status(500).json({ message: 'Error adding class' });
     }
     res.json({ message: 'Class added successfully' });
   });
 });
 
-// Get classes (Lecturer, Program Leader, Principal Lecturer, queries classes table)
+// Get classes (AuthContext: api.getClasses)
 app.get('/api/classes', authenticate, (req, res) => {
   let sql = 'SELECT cl.*, c.name as course_name, c.code as course_code, c.faculty_name, u.name as lecturer_name FROM classes cl JOIN courses c ON cl.course_id = c.id LEFT JOIN users u ON cl.lecturer_id = u.id';
   let params = [];
@@ -187,13 +186,13 @@ app.get('/api/classes', authenticate, (req, res) => {
   db.query(sql, params, (err, results) => {
     if (err) {
       console.error('Fetch classes error:', err);
-      return res.status(500).json({ message: 'Error fetching classes', error: err.message });
+      return res.status(500).json({ message: 'Error fetching classes' });
     }
     res.json(results);
   });
 });
 
-// Get class details (Lecturer, queries classes and enrollments tables)
+// Get class details (AuthContext: api.getClassDetails)
 app.get('/api/class/:id', authenticate, (req, res) => {
   db.query(
     'SELECT cl.*, c.name as course_name, c.code as course_code, c.faculty_name, u.name as lecturer_name FROM classes cl JOIN courses c ON cl.course_id = c.id LEFT JOIN users u ON cl.lecturer_id = u.id WHERE cl.id = ?',
@@ -201,14 +200,14 @@ app.get('/api/class/:id', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch class details error:', err);
-        return res.status(500).json({ message: 'Error fetching class details', error: err.message });
+        return res.status(500).json({ message: 'Error fetching class details' });
       }
       if (results.length === 0) return res.status(404).json({ message: 'Class not found' });
       const classInfo = results[0];
       db.query('SELECT u.id, u.name FROM enrollments e JOIN users u ON e.student_id = u.id WHERE e.class_id = ?', [req.params.id], (err, students) => {
         if (err) {
           console.error('Fetch students error:', err);
-          return res.status(500).json({ message: 'Error fetching students', error: err.message });
+          return res.status(500).json({ message: 'Error fetching students' });
         }
         classInfo.students = students;
         classInfo.total_registered = students.length;
@@ -218,7 +217,7 @@ app.get('/api/class/:id', authenticate, (req, res) => {
   );
 });
 
-// Enroll in class (Student, inserts into enrollments table)
+// Enroll in class (AuthContext: api.enrollClass)
 app.post('/api/enroll', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can enroll' });
   const { classId } = req.body;
@@ -231,13 +230,13 @@ app.post('/api/enroll', authenticate, (req, res) => {
       } else if (err.code === 'ER_DUP_ENTRY') {
         return res.status(400).json({ message: 'Already enrolled in this class' });
       }
-      return res.status(500).json({ message: 'Error enrolling', error: err.message });
+      return res.status(500).json({ message: 'Error enrolling' });
     }
     res.json({ message: 'Enrolled successfully' });
   });
 });
 
-// Get available classes (Student, queries classes and courses tables)
+// Get available classes (AuthContext: api.availableClasses)
 app.get('/api/available-classes', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can view available classes' });
   const query = req.query.search ? `%${req.query.search}%` : '%';
@@ -247,14 +246,14 @@ app.get('/api/available-classes', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch available classes error:', err);
-        return res.status(500).json({ message: 'Error fetching available classes', error: err.message });
+        return res.status(500).json({ message: 'Error fetching available classes' });
       }
       res.json(results);
     }
   );
 });
 
-// Get enrolled classes (Student, queries enrollments, classes, and courses tables)
+// Get enrolled classes (AuthContext: api.myEnrollments)
 app.get('/api/my-enrollments', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can view their enrollments' });
   const query = req.query.search ? `%${req.query.search}%` : '%';
@@ -264,14 +263,14 @@ app.get('/api/my-enrollments', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch enrollments error:', err);
-        return res.status(500).json({ message: 'Error fetching enrollments', error: err.message });
+        return res.status(500).json({ message: 'Error fetching enrollments' });
       }
       res.json(results);
     }
   );
 });
 
-// Submit report (Lecturer, inserts into reports and attendance tables)
+// Submit report (AuthContext: api.submitReport)
 app.post('/api/reports', authenticate, (req, res) => {
   if (req.user.role !== 'lecturer') return res.status(403).json({ message: 'Forbidden: Only lecturers can submit reports' });
   const { classId, week, dateLecture, venue, scheduledTime, topic, learningOutcomes, recommendations, attendances } = req.body;
@@ -281,7 +280,7 @@ app.post('/api/reports', authenticate, (req, res) => {
   db.query('SELECT COUNT(*) as total FROM enrollments WHERE class_id = ?', [classId], (err, result) => {
     if (err) {
       console.error('Fetch enrollment count error:', err);
-      return res.status(500).json({ message: 'Error fetching enrollment count', error: err.message });
+      return res.status(500).json({ message: 'Error fetching enrollment count' });
     }
     const total = result[0].total || 0;
     const actual = attendances.filter(a => a.present).length;
@@ -294,7 +293,7 @@ app.post('/api/reports', authenticate, (req, res) => {
           if (err.code === 'ER_NO_REFERENCED_ROW') {
             return res.status(400).json({ message: 'Invalid class ID' });
           }
-          return res.status(500).json({ message: 'Error creating report', error: err.message });
+          return res.status(500).json({ message: 'Error creating report' });
         }
         const reportId = insertResult.insertId;
         const attendanceQueries = attendances.map(a => new Promise((resolve, reject) => {
@@ -307,14 +306,14 @@ app.post('/api/reports', authenticate, (req, res) => {
           .then(() => res.json({ message: 'Report created successfully' }))
           .catch(err => {
             console.error('Save attendance error:', err);
-            res.status(500).json({ message: 'Error saving attendance', error: err.message });
+            res.status(500).json({ message: 'Error saving attendance' });
           });
       }
     );
   });
 });
 
-// Get reports (Lecturer, Program Leader, Principal Lecturer, queries reports, classes, courses, users tables)
+// Get reports (AuthContext: api.getReports)
 app.get('/api/reports', authenticate, (req, res) => {
   if (!['lecturer', 'pl', 'prl'].includes(req.user.role)) {
     return res.status(403).json({ message: 'Forbidden: Only lecturers, Program Leaders, and Principal Lecturers can access reports' });
@@ -331,17 +330,16 @@ app.get('/api/reports', authenticate, (req, res) => {
   sql += params.length ? ' AND' : ' WHERE';
   sql += ' (r.topic LIKE ? OR r.venue LIKE ? OR cl.name LIKE ?)';
   params.push(query, query, query);
-  console.log('Executing reports query:', sql, 'with params:', params);
   db.query(sql, params, (err, results) => {
     if (err) {
       console.error('Fetch reports error:', err);
-      return res.status(500).json({ message: 'Error fetching reports', error: err.message });
+      return res.status(500).json({ message: 'Error fetching reports' });
     }
     res.json(results);
   });
 });
 
-// Add feedback to report (Principal Lecturer, updates reports table)
+// Add feedback to report (AuthContext: api.addFeedback)
 app.put('/api/reports/:id/feedback', authenticate, (req, res) => {
   if (req.user.role !== 'prl') return res.status(403).json({ message: 'Forbidden: Only Principal Lecturers can add feedback' });
   const { feedback } = req.body;
@@ -349,14 +347,14 @@ app.put('/api/reports/:id/feedback', authenticate, (req, res) => {
   db.query('UPDATE reports SET prl_feedback = ? WHERE id = ?', [feedback, req.params.id], (err, result) => {
     if (err) {
       console.error('Add feedback error:', err);
-      return res.status(500).json({ message: 'Error adding feedback', error: err.message });
+      return res.status(500).json({ message: 'Error adding feedback' });
     }
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Report not found' });
     res.json({ message: 'Feedback added successfully' });
   });
 });
 
-// Get student attendance (Student, queries attendance, reports, classes, courses tables)
+// Get student attendance (AuthContext: api.myAttendance)
 app.get('/api/my-attendance', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can view their attendance' });
   const query = req.query.search ? `%${req.query.search}%` : '%';
@@ -366,14 +364,14 @@ app.get('/api/my-attendance', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch attendance error:', err);
-        return res.status(500).json({ message: 'Error fetching attendance', error: err.message });
+        return res.status(500).json({ message: 'Error fetching attendance' });
       }
       res.json(results);
     }
   );
 });
 
-// Submit report rating (Student, inserts into ratings table)
+// Submit report rating (AuthContext: api.rateReport)
 app.post('/api/ratings', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can submit ratings' });
   const { reportId, rating, comment } = req.body;
@@ -391,14 +389,14 @@ app.post('/api/ratings', authenticate, (req, res) => {
         } else if (err.code === 'ER_NO_REFERENCED_ROW') {
           return res.status(400).json({ message: 'Invalid report ID' });
         }
-        return res.status(500).json({ message: 'Error adding rating', error: err.message });
+        return res.status(500).json({ message: 'Error adding rating' });
       }
       res.json({ message: 'Rating submitted successfully' });
     }
   );
 });
 
-// Get report ratings (Lecturer, queries ratings and users tables)
+// Get report ratings (AuthContext: api.getReportRatings)
 app.get('/api/reports/:id/ratings', authenticate, (req, res) => {
   if (req.user.role !== 'lecturer') return res.status(403).json({ message: 'Forbidden: Only lecturers can view report ratings' });
   db.query(
@@ -407,7 +405,7 @@ app.get('/api/reports/:id/ratings', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch ratings error:', err);
-        return res.status(500).json({ message: 'Error fetching ratings', error: err.message });
+        return res.status(500).json({ message: 'Error fetching ratings' });
       }
       if (results.length === 0) {
         return res.status(404).json({ message: 'No ratings found for this report' });
@@ -417,7 +415,7 @@ app.get('/api/reports/:id/ratings', authenticate, (req, res) => {
   );
 });
 
-// Get report attendance (Lecturer, queries attendance and users tables)
+// Get report attendance (AuthContext: api.getReportAttendance)
 app.get('/api/reports/:id/attendance', authenticate, (req, res) => {
   if (req.user.role !== 'lecturer') return res.status(403).json({ message: 'Forbidden: Only lecturers can view attendance' });
   db.query(
@@ -426,7 +424,7 @@ app.get('/api/reports/:id/attendance', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch attendance error:', err);
-        return res.status(500).json({ message: 'Error fetching attendance', error: err.message });
+        return res.status(500).json({ message: 'Error fetching attendance' });
       }
       if (results.length === 0) {
         return res.status(404).json({ message: 'No attendance data found for this report' });
@@ -436,7 +434,7 @@ app.get('/api/reports/:id/attendance', authenticate, (req, res) => {
   );
 });
 
-// Submit lecturer rating (Student, inserts into lecturer_ratings table)
+// Submit lecturer rating (AuthContext: api.rateLecturer)
 app.post('/api/lecturer-ratings', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can rate lecturers' });
   const { lecturerId, rating, comment } = req.body;
@@ -454,14 +452,14 @@ app.post('/api/lecturer-ratings', authenticate, (req, res) => {
         } else if (err.code === 'ER_NO_REFERENCED_ROW') {
           return res.status(400).json({ message: 'Invalid lecturer ID' });
         }
-        return res.status(500).json({ message: 'Error adding lecturer rating', error: err.message });
+        return res.status(500).json({ message: 'Error adding lecturer rating' });
       }
       res.json({ message: 'Lecturer rating submitted successfully' });
     }
   );
 });
 
-// Get lecturer ratings for a specific lecturer (Lecturer, queries lecturer_ratings and users tables)
+// Get lecturer ratings for a specific lecturer (AuthContext: api.getLecturerRatings)
 app.get('/api/lecturer-ratings/:lecturerId', authenticate, (req, res) => {
   if (req.user.role !== 'lecturer' || req.user.id !== parseInt(req.params.lecturerId)) {
     return res.status(403).json({ message: 'Forbidden: Lecturers can only view their own ratings' });
@@ -472,14 +470,14 @@ app.get('/api/lecturer-ratings/:lecturerId', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch lecturer ratings error:', err);
-        return res.status(500).json({ message: 'Error fetching lecturer ratings', error: err.message });
+        return res.status(500).json({ message: 'Error fetching lecturer ratings' });
       }
       res.json(results);
     }
   );
 });
 
-// Get lecturer ratings for a specific lecturer (Student, queries lecturer_ratings and users tables)
+// Get lecturer ratings for a specific lecturer (Student)
 app.get('/api/lecturer-ratings/:lecturerId/student', authenticate, (req, res) => {
   if (req.user.role !== 'student') {
     return res.status(403).json({ message: 'Forbidden: Only students can view lecturer ratings' });
@@ -490,14 +488,14 @@ app.get('/api/lecturer-ratings/:lecturerId/student', authenticate, (req, res) =>
     (err, results) => {
       if (err) {
         console.error('Fetch lecturer ratings error:', err);
-        return res.status(500).json({ message: 'Error fetching lecturer ratings', error: err.message });
+        return res.status(500).json({ message: 'Error fetching lecturer ratings' });
       }
       res.json(results);
     }
   );
 });
 
-// Get all lecturer ratings (Principal Lecturer, queries lecturer_ratings and users tables)
+// Get all lecturer ratings (AuthContext: api.getAllLecturerRatings)
 app.get('/api/lecturer-ratings', authenticate, (req, res) => {
   if (req.user.role !== 'prl') return res.status(403).json({ message: 'Forbidden: Only Principal Lecturers can view all lecturer ratings' });
   const query = req.query.search ? `%${req.query.search}%` : '%';
@@ -507,14 +505,14 @@ app.get('/api/lecturer-ratings', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch all lecturer ratings error:', err);
-        return res.status(500).json({ message: 'Error fetching lecturer ratings', error: err.message });
+        return res.status(500).json({ message: 'Error fetching lecturer ratings' });
       }
       res.json(results);
     }
   );
 });
 
-// Get lecturers for a student (Student, queries users, classes, and enrollments tables)
+// Get lecturers for a student (AuthContext: api.myLecturers)
 app.get('/api/my-lecturers', authenticate, (req, res) => {
   if (req.user.role !== 'student') return res.status(403).json({ message: 'Forbidden: Only students can view their lecturers' });
   db.query(
@@ -523,14 +521,14 @@ app.get('/api/my-lecturers', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch my lecturers error:', err);
-        return res.status(500).json({ message: 'Error fetching lecturers', error: err.message });
+        return res.status(500).json({ message: 'Error fetching lecturers' });
       }
       res.json(results);
     }
   );
 });
 
-// Export reports (Program Leader, Principal Lecturer, queries reports and classes tables)
+// Export reports (AuthContext: api.exportReports)
 app.get('/api/reports/export', authenticate, async (req, res) => {
   if (!['pl', 'prl'].includes(req.user.role)) {
     return res.status(403).json({ message: 'Forbidden: Only Program Leaders and Principal Lecturers can export reports' });
@@ -561,7 +559,7 @@ app.get('/api/reports/export', authenticate, async (req, res) => {
   db.query(sql, params, (err, results) => {
     if (err) {
       console.error('Export reports error:', err);
-      return res.status(500).json({ message: 'Error exporting reports', error: err.message });
+      return res.status(500).json({ message: 'Error exporting reports' });
     }
     worksheet.addRows(results);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -570,7 +568,7 @@ app.get('/api/reports/export', authenticate, async (req, res) => {
   });
 });
 
-// Mark attendance (Student, inserts into reports and attendance tables)
+// Mark attendance (AuthContext: api.markAttendance)
 app.post('/api/attendance', authenticate, (req, res) => {
   if (req.user.role !== 'student') {
     return res.status(403).json({ message: 'Forbidden: Only students can mark attendance' });
@@ -586,7 +584,7 @@ app.post('/api/attendance', authenticate, (req, res) => {
     (err, enrollmentResults) => {
       if (err) {
         console.error('Enrollment check error:', err);
-        return res.status(500).json({ message: 'Error checking enrollment', error: err.message });
+        return res.status(500).json({ message: 'Error checking enrollment' });
       }
       if (enrollmentResults.length === 0) {
         return res.status(400).json({ message: 'You are not enrolled in this class' });
@@ -598,7 +596,7 @@ app.post('/api/attendance', authenticate, (req, res) => {
         (err, reportResults) => {
           if (err) {
             console.error('Report check error:', err);
-            return res.status(500).json({ message: 'Error checking report', error: err.message });
+            return res.status(500).json({ message: 'Error checking report' });
           }
 
           let reportId;
@@ -611,7 +609,7 @@ app.post('/api/attendance', authenticate, (req, res) => {
               (err, insertResult) => {
                 if (err) {
                   console.error('Create report error:', err);
-                  return res.status(500).json({ message: 'Error creating report', error: err.message });
+                  return res.status(500).json({ message: 'Error creating report' });
                 }
                 reportId = insertResult.insertId;
                 insertAttendance();
@@ -632,7 +630,7 @@ app.post('/api/attendance', authenticate, (req, res) => {
                   if (err.code === 'ER_DUP_ENTRY') {
                     return res.status(400).json({ message: 'Attendance already marked for this date' });
                   }
-                  return res.status(500).json({ message: 'Error marking attendance', error: err.message });
+                  return res.status(500).json({ message: 'Error marking attendance' });
                 }
                 db.query(
                   'UPDATE reports SET actual_present = (SELECT COUNT(*) FROM attendance WHERE report_id = ? AND present = 1) WHERE id = ?',
@@ -640,7 +638,7 @@ app.post('/api/attendance', authenticate, (req, res) => {
                   (err) => {
                     if (err) {
                       console.error('Update report error:', err);
-                      return res.status(500).json({ message: 'Error updating report', error: err.message });
+                      return res.status(500).json({ message: 'Error updating report' });
                     }
                     res.json({ message: 'Attendance marked successfully' });
                   }
