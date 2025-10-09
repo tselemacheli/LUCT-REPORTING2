@@ -3,7 +3,7 @@ import axios from "axios";
 
 // Use your Render deployment URL for production
 const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "https://luct-reporting2-12.onrender.com/api";
+  process.env.REACT_APP_API_URL || "https://luct-reporting2-13.onrender.com/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
