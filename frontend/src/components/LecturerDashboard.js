@@ -1,19 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import api from '../axiosConfig';
+import React, { useState, useEffect, useCallback } from 'react';
+import api from '../api/api';
 import * as XLSX from 'xlsx';
 import '../App.css';
 
 const LecturerDashboard = () => {
-  const [state, setState] = useState({
-    classes: [],
-    selectedClass: null,
-    reports: [],
-    lecturerRatings: [],
-    search: '',
-    expandedReports: {},
-    error: ''
-  });
-
+  const [classes, setClasses] = useState([]);
+  const [selectedClass, setSelectedClass] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [lecturerRatings, setLecturerRatings] = useState([]);
+  const [attendances, setAttendances] = useState([]);
+  const [search, setSearch] = useState('');
+  const [expandedReports, setExpandedReports] = useState({});
   const [form, setForm] = useState({
     week: '',
     dateLecture: '',
@@ -23,89 +20,93 @@ const LecturerDashboard = () => {
     learningOutcomes: '',
     recommendations: ''
   });
+  const [loading, setLoading] = useState({
+    classes: false,
+    reports: false,
+    ratings: false,
+    submit: false
+  });
+  const [error, setError] = useState('');
 
-  const [attendances, setAttendances] = useState([]);
-  const [loading, setLoading] = useState(false);
-
+  // Debounced search
   useEffect(() => {
-    fetchClasses();
-    fetchReports();
+    const delayDebounce = setTimeout(() => {
+      fetchClasses();
+      fetchReports();
+    }, 500);
+    return () => clearTimeout(delayDebounce);
+  }, [search]);
+
+  // Initial ratings fetch
+  useEffect(() => {
     fetchLecturerRatings();
-  }, [state.search]);
+  }, []);
 
-  const setStateField = (field, value) => {
-    setState(prev => ({ ...prev, [field]: value }));
-  };
-
-  const setFormField = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-  };
-
+  // API fetch functions
   const fetchClasses = async () => {
+    setLoading(prev => ({ ...prev, classes: true }));
     try {
-      const res = await api.get(`/classes?search=${encodeURIComponent(state.search)}`);
-      setStateField('classes', res.data || []);
+      const res = await api.get(`/classes?search=${encodeURIComponent(search)}`);
+      setClasses(res.data || []);
+      setError('');
     } catch (err) {
-      setStateField('error', 'Error fetching classes: ' + (err.response?.data?.message || err.message));
+      setError('Error fetching classes: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(prev => ({ ...prev, classes: false }));
     }
   };
 
   const fetchReports = async () => {
+    setLoading(prev => ({ ...prev, reports: true }));
     try {
-      const res = await api.get(`/reports?search=${encodeURIComponent(state.search)}`);
-      setStateField('reports', res.data || []);
+      const res = await api.get(`/reports?search=${encodeURIComponent(search)}`);
+      setReports(res.data || []);
+      setError('');
     } catch (err) {
-      setStateField('error', 'Error fetching reports: ' + (err.response?.data?.message || err.message));
+      setError('Error fetching reports: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(prev => ({ ...prev, reports: false }));
     }
   };
 
   const fetchLecturerRatings = async () => {
+    setLoading(prev => ({ ...prev, ratings: true }));
     try {
-      const res = await api.get(`/lecturer-ratings/${localStorage.getItem('userId')}`);
-      setStateField('lecturerRatings', res.data || []);
+      const userId = localStorage.getItem('userId');
+      const res = await api.get(`/lecturer-ratings/${userId}`);
+      setLecturerRatings(res.data || []);
+      setError('');
     } catch (err) {
-      setStateField('error', 'Error fetching lecturer ratings: ' + (err.response?.data?.message || err.message));
+      setError('Error fetching lecturer ratings: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(prev => ({ ...prev, ratings: false }));
     }
   };
 
   const loadClass = async (id) => {
     try {
       const res = await api.get(`/class/${id}`);
-      setStateField('selectedClass', res.data);
-      setAttendances(res.data.students.map(student => ({
-        studentId: student.id,
-        present: true
-      })));
+      setSelectedClass(res.data);
+      setAttendances(res.data.students.map(s => ({ studentId: s.id, present: true })));
+      setError('');
     } catch (err) {
-      setStateField('error', 'Error loading class: ' + (err.response?.data?.message || err.message));
+      setError('Error loading class: ' + (err.response?.data?.message || err.message));
     }
   };
 
   const toggleAttendance = (studentId) => {
     setAttendances(prev =>
-      prev.map(attendance =>
-        attendance.studentId === studentId
-          ? { ...attendance, present: !attendance.present }
-          : attendance
-      )
+      prev.map(a => (a.studentId === studentId ? { ...a, present: !a.present } : a))
     );
   };
 
   const submitReport = async () => {
-    if (!state.selectedClass) return;
-
-    setLoading(true);
+    if (!selectedClass) return;
+    setLoading(prev => ({ ...prev, submit: true }));
     try {
-      await api.post('/reports', {
-        ...form,
-        classId: state.selectedClass.id,
-        attendances
-      });
-
+      await api.post('/reports', { ...form, classId: selectedClass.id, attendances });
       alert('Report submitted successfully!');
       fetchReports();
-      
-      // Reset form
       setForm({
         week: '',
         dateLecture: '',
@@ -115,78 +116,63 @@ const LecturerDashboard = () => {
         learningOutcomes: '',
         recommendations: ''
       });
-      setStateField('selectedClass', null);
+      setSelectedClass(null);
       setAttendances([]);
+      setError('');
     } catch (err) {
-      setStateField('error', 'Error submitting report: ' + (err.response?.data?.message || err.message));
+      setError('Error submitting report: ' + (err.response?.data?.message || err.message));
     } finally {
-      setLoading(false);
+      setLoading(prev => ({ ...prev, submit: false }));
     }
   };
 
   const toggleReportDetails = (id) => {
-    setStateField('expandedReports', {
-      ...state.expandedReports,
-      [id]: !state.expandedReports[id]
-    });
+    setExpandedReports(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const downloadRatingsAsXLSX = () => {
-    if (state.lecturerRatings.length === 0) {
-      alert('No ratings data available to download.');
-      return;
-    }
-
-    const ratingsData = state.lecturerRatings.map(rating => ({
-      'Student ID': rating.studentId,
-      'Rating': rating.rating,
-      'Comment': rating.comment || 'No comment',
-      'Date': new Date(rating.createdAt).toLocaleDateString()
+    if (!lecturerRatings.length) return alert('No ratings data available');
+    const data = lecturerRatings.map(r => ({
+      'Student ID': r.studentId,
+      'Rating': r.rating,
+      'Comment': r.comment || 'No comment',
+      'Date': new Date(r.createdAt).toLocaleDateString()
     }));
-
-    const worksheet = XLSX.utils.json_to_sheet(ratingsData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Lecturer Ratings');
-    XLSX.writeFile(workbook, 'lecturer-ratings.xlsx');
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Lecturer Ratings');
+    XLSX.writeFile(wb, 'lecturer-ratings.xlsx');
   };
-
-  const { classes, selectedClass, reports, lecturerRatings, search, expandedReports, error } = state;
 
   return (
     <div className="lecturer-dashboard">
-      {error && <div className="col-12"><div className="auth-error">{error}</div></div>}
+      {error && <div className="auth-error">{error}</div>}
 
-      {/* Classes and Reports Section */}
       <div className="dashboard-column">
-        {/* Classes Card */}
+        {/* Classes */}
         <div className="dashboard-card">
           <div className="dashboard-card-header">
-            <i className="fas fa-chalkboard-teacher me-2"></i>
-            My Classes
+            <i className="fas fa-chalkboard-teacher me-2"></i>My Classes
           </div>
           <div className="dashboard-card-body">
             <input
               type="text"
               placeholder="Search classes..."
               value={search}
-              onChange={(e) => setStateField('search', e.target.value)}
-              className="dashboard-input"
+              onChange={e => setSearch(e.target.value)}
+              className="dashboard-input mb-3"
             />
-            
-            {classes.length > 0 ? (
-              classes.map((cls) => (
-                <div key={cls.id} className="dashboard-subcard">
-                  <h6>{cls.name}</h6>
-                  <p className="mb-2 text-muted">{cls.course_name}</p>
-                  <button
-                    onClick={() => loadClass(cls.id)}
-                    className="dashboard-button primary"
-                  >
-                    Create Report
-                  </button>
-                </div>
-              ))
-            ) : (
+            {loading.classes ? (
+              <p className="text-center text-muted">Loading classes...</p>
+            ) : classes.length ? classes.map(cls => (
+              <div key={cls.id} className="dashboard-subcard">
+                <h6>{cls.name}</h6>
+                <p className="text-muted">{cls.course_name}</p>
+                <button onClick={() => loadClass(cls.id)} className="dashboard-button primary">
+                  Create Report
+                </button>
+              </div>
+            )) : (
               <div className="text-center text-muted py-4">
                 <i className="fas fa-chalkboard-teacher fa-2x mb-2"></i>
                 <p>No classes found</p>
@@ -195,41 +181,36 @@ const LecturerDashboard = () => {
           </div>
         </div>
 
-        {/* Reports Card */}
+        {/* Reports */}
         <div className="dashboard-card">
           <div className="dashboard-card-header">
-            <i className="fas fa-file-alt me-2"></i>
-            My Reports
+            <i className="fas fa-file-alt me-2"></i>My Reports
           </div>
           <div className="dashboard-card-body">
-            {reports.length > 0 ? (
-              reports.map((report) => (
-                <div key={report.id} className="dashboard-subcard">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h6>{report.class_name}</h6>
-                      <small className="text-muted">Week {report.week}</small>
-                    </div>
-                    <button
-                      onClick={() => toggleReportDetails(report.id)}
-                      className="dashboard-button success"
-                    >
-                      {expandedReports[report.id] ? 'Hide' : 'View'}
-                    </button>
+            {loading.reports ? (
+              <p className="text-center text-muted">Loading reports...</p>
+            ) : reports.length ? reports.map(report => (
+              <div key={report.id} className="dashboard-subcard">
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6>{report.class_name}</h6>
+                    <small className="text-muted">Week {report.week}</small>
                   </div>
-                  
-                  {expandedReports[report.id] && (
-                    <div className="report-details mt-3">
-                      <p><strong>Topic:</strong> {report.topic}</p>
-                      <p><strong>Venue:</strong> {report.venue}</p>
-                      <p><strong>Learning Outcomes:</strong> {report.learning_outcomes}</p>
-                      <p><strong>Recommendations:</strong> {report.recommendations}</p>
-                      <p><strong>Attendance:</strong> {report.attendance_count} students</p>
-                    </div>
-                  )}
+                  <button onClick={() => toggleReportDetails(report.id)} className="dashboard-button success">
+                    {expandedReports[report.id] ? 'Hide' : 'View'}
+                  </button>
                 </div>
-              ))
-            ) : (
+                {expandedReports[report.id] && (
+                  <div className="report-details mt-3">
+                    <p><strong>Topic:</strong> {report.topic}</p>
+                    <p><strong>Venue:</strong> {report.venue}</p>
+                    <p><strong>Learning Outcomes:</strong> {report.learning_outcomes}</p>
+                    <p><strong>Recommendations:</strong> {report.recommendations}</p>
+                    <p><strong>Attendance:</strong> {report.attendance_count} students</p>
+                  </div>
+                )}
+              </div>
+            )) : (
               <div className="text-center text-muted py-4">
                 <i className="fas fa-file-alt fa-2x mb-2"></i>
                 <p>No reports submitted yet</p>
@@ -239,40 +220,38 @@ const LecturerDashboard = () => {
         </div>
       </div>
 
-      {/* Report Form and Ratings Section */}
+      {/* Report Form & Ratings */}
       <div className="dashboard-column">
-        {/* Report Form Card */}
         {selectedClass && (
           <div className="dashboard-card">
             <div className="dashboard-card-header">
-              <i className="fas fa-edit me-2"></i>
-              Create Report for {selectedClass.name}
+              <i className="fas fa-edit me-2"></i>Create Report for {selectedClass.name}
             </div>
             <div className="dashboard-card-body">
               <form>
-                {Object.keys(form).map((field) => (
+                {Object.keys(form).map(field => (
                   <input
                     key={field}
                     type={field === 'dateLecture' ? 'date' : 'text'}
                     placeholder={field.replace(/([A-Z])/g, ' $1').toLowerCase()}
                     value={form[field]}
-                    onChange={(e) => setFormField(field, e.target.value)}
+                    onChange={e => setForm(prev => ({ ...prev, [field]: e.target.value }))}
                     className="dashboard-input"
                   />
                 ))}
 
                 <h6 className="mt-4 mb-3">Attendance</h6>
-                {attendances.map((attendance) => {
-                  const student = selectedClass.students.find(s => s.id === attendance.studentId);
+                {attendances.map(a => {
+                  const student = selectedClass.students.find(s => s.id === a.studentId);
                   return (
-                    <div key={attendance.studentId} className="attendance-row">
+                    <div key={a.studentId} className="attendance-row">
                       <span className="flex-grow-1">{student?.name}</span>
                       <button
                         type="button"
-                        onClick={() => toggleAttendance(attendance.studentId)}
-                        className={`dashboard-button ${attendance.present ? 'success' : 'danger'}`}
+                        onClick={() => toggleAttendance(a.studentId)}
+                        className={`dashboard-button ${a.present ? 'success' : 'danger'}`}
                       >
-                        {attendance.present ? 'Present' : 'Absent'}
+                        {a.present ? 'Present' : 'Absent'}
                       </button>
                     </div>
                   );
@@ -282,48 +261,43 @@ const LecturerDashboard = () => {
                   type="button"
                   onClick={submitReport}
                   className="dashboard-button primary w-100 mt-4"
-                  disabled={loading}
+                  disabled={loading.submit}
                 >
-                  {loading ? 'Submitting...' : 'Submit Report'}
+                  {loading.submit ? 'Submitting...' : 'Submit Report'}
                 </button>
               </form>
             </div>
           </div>
         )}
 
-        {/* Ratings Card */}
         <div className="dashboard-card">
           <div className="dashboard-card-header">
-            <i className="fas fa-star me-2"></i>
-            My Ratings
+            <i className="fas fa-star me-2"></i>My Ratings
             <button
               onClick={downloadRatingsAsXLSX}
               className="dashboard-button success float-end"
-              disabled={lecturerRatings.length === 0}
+              disabled={loading.ratings || !lecturerRatings.length}
             >
-              <i className="fas fa-download me-1"></i>
-              Export
+              <i className="fas fa-download me-1"></i>Export
             </button>
           </div>
           <div className="dashboard-card-body">
-            {lecturerRatings.length > 0 ? (
-              lecturerRatings.map((rating) => (
-                <div key={rating.id} className="dashboard-subcard">
-                  <div className="d-flex justify-content-between align-items-start">
-                    <div>
-                      <h6>Rating: {rating.rating}/5</h6>
-                      <p className="mb-1">{rating.comment || 'No comment provided'}</p>
-                      <small className="text-muted">
-                        Student ID: {rating.studentId}
-                      </small>
-                    </div>
-                    <div className="text-warning">
-                      {'★'.repeat(rating.rating)}{'☆'.repeat(5 - rating.rating)}
-                    </div>
+            {loading.ratings ? (
+              <p className="text-center text-muted">Loading ratings...</p>
+            ) : lecturerRatings.length ? lecturerRatings.map(r => (
+              <div key={r.id} className="dashboard-subcard">
+                <div className="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h6>Rating: {r.rating}/5</h6>
+                    <p className="mb-1">{r.comment || 'No comment provided'}</p>
+                    <small className="text-muted">Student ID: {r.studentId}</small>
+                  </div>
+                  <div className="text-warning">
+                    {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
                   </div>
                 </div>
-              ))
-            ) : (
+              </div>
+            )) : (
               <div className="text-center text-muted py-4">
                 <i className="fas fa-star fa-2x mb-2"></i>
                 <p>No ratings received yet</p>
