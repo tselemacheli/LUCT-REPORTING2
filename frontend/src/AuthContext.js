@@ -1,4 +1,3 @@
-// src/context/AuthContext.js
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
@@ -9,12 +8,10 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Use your Render deployment URL
-  const API_BASE_URL = "https://luct-reporting2-13.onrender.com/api";
+  // Backend Render deployment URL
+  const API_BASE_URL = 'https://luct-reporting2-13.onrender.com/api';
 
-  // --------------------------
   // Initialize user from token
-  // --------------------------
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -35,9 +32,7 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // --------------------------
   // Login function
-  // --------------------------
   const login = async (identifier, password) => {
     try {
       setLoading(true);
@@ -56,9 +51,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // --------------------------
   // Logout function
-  // --------------------------
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
@@ -66,13 +59,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // --------------------------
   // API helpers
-  // --------------------------
   const api = {
     // USERS
     register: (data) => axios.post(`${API_BASE_URL}/register`, data),
-    login, // already defined above
+    login,
 
     // COURSES
     getCourses: (search = '') => axios.get(`${API_BASE_URL}/courses`, { params: { search } }),
@@ -104,6 +95,7 @@ export const AuthProvider = ({ children }) => {
     rateReport: (data) => axios.post(`${API_BASE_URL}/ratings`, data),
     rateLecturer: (data) => axios.post(`${API_BASE_URL}/lecturer-ratings`, data),
     getLecturerRatings: (lecturerId) => axios.get(`${API_BASE_URL}/lecturer-ratings/${lecturerId}`),
+    getStudentLecturerRatings: (lecturerId) => axios.get(`${API_BASE_URL}/lecturer-ratings/${lecturerId}/student`), // Added for students
     getAllLecturerRatings: (search = '') => axios.get(`${API_BASE_URL}/lecturer-ratings`, { params: { search } }),
 
     // LECTURERS
