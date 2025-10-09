@@ -1,7 +1,7 @@
-// src/components/StudentDashboard.jsx
-import React, { useState, useEffect } from "react";
-import api from "../api/api"; // Updated axios config
+import React, { useState, useEffect, useCallback } from "react";
+import api from "../api/api";
 import "../App.css";
+import debounce from 'lodash/debounce';
 
 const StudentDashboard = () => {
   const [classes, setClasses] = useState([]);
@@ -9,6 +9,7 @@ const StudentDashboard = () => {
   const [lecturers, setLecturers] = useState([]);
   const [lecturerRatings, setLecturerRatings] = useState({});
   const [selectedClassId, setSelectedClassId] = useState("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState({
     classes: false,
     enrollments: false,
@@ -16,59 +17,71 @@ const StudentDashboard = () => {
   });
   const [message, setMessage] = useState({ type: "", text: "" });
 
-  // Show messages
   const showMessage = (type, text, duration = 3000) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: "", text: "" }), duration);
   };
 
-  // Fetch available classes
-  const fetchAvailableClasses = async () => {
-    setLoading((prev) => ({ ...prev, classes: true }));
-    try {
-      const data = await api.get("/available-classes");
-      setClasses(data);
-    } catch (err) {
-      showMessage("error", "Error fetching classes: " + err.message);
-    } finally {
-      setLoading((prev) => ({ ...prev, classes: false }));
-    }
-  };
+  const debouncedFetchClasses = useCallback(
+    debounce(async (searchTerm) => {
+      setLoading((prev) => ({ ...prev, classes: true }));
+      try {
+        const { data } = await api.get("/available-classes", { params: { search: searchTerm } });
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid response format: Expected an array");
+        }
+        setClasses(data);
+      } catch (err) {
+        showMessage("error", `Error fetching classes: ${err.response?.data?.message || err.message}`);
+        setClasses([]);
+      } finally {
+        setLoading((prev) => ({ ...prev, classes: false }));
+      }
+    }, 500),
+    []
+  );
 
-  // Fetch enrolled classes
-  const fetchEnrollments = async () => {
-    setLoading((prev) => ({ ...prev, enrollments: true }));
-    try {
-      const data = await api.get("/my-enrollments");
-      setEnrollments(data);
-    } catch (err) {
-      showMessage("error", "Error fetching enrollments: " + err.message);
-    } finally {
-      setLoading((prev) => ({ ...prev, enrollments: false }));
-    }
-  };
+  const debouncedFetchEnrollments = useCallback(
+    debounce(async (searchTerm) => {
+      setLoading((prev) => ({ ...prev, enrollments: true }));
+      try {
+        const { data } = await api.get("/my-enrollments", { params: { search: searchTerm } });
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid response format: Expected an array");
+        }
+        setEnrollments(data);
+      } catch (err) {
+        showMessage("error", `Error fetching enrollments: ${err.response?.data?.message || err.message}`);
+        setEnrollments([]);
+      } finally {
+        setLoading((prev) => ({ ...prev, enrollments: false }));
+      }
+    }, 500),
+    []
+  );
 
-  // Fetch lecturers
   const fetchLecturers = async () => {
     setLoading((prev) => ({ ...prev, lecturers: true }));
     try {
-      const data = await api.get("/my-lecturers");
+      const { data } = await api.get("/my-lecturers");
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid response format: Expected an array");
+      }
       setLecturers(data);
     } catch (err) {
-      showMessage("error", "Error fetching lecturers: " + err.message);
+      showMessage("error", `Error fetching lecturers: ${err.response?.data?.message || err.message}`);
+      setLecturers([]);
     } finally {
       setLoading((prev) => ({ ...prev, lecturers: false }));
     }
   };
 
-  // Initial load
   useEffect(() => {
-    fetchAvailableClasses();
-    fetchEnrollments();
+    debouncedFetchClasses(search);
+    debouncedFetchEnrollments(search);
     fetchLecturers();
-  }, []);
+  }, [search, debouncedFetchClasses, debouncedFetchEnrollments]);
 
-  // Enroll in class
   const handleEnroll = async () => {
     if (!selectedClassId) {
       showMessage("error", "Please select a class to enroll");
@@ -79,17 +92,16 @@ const StudentDashboard = () => {
       await api.post("/enroll", { classId: selectedClassId });
       showMessage("success", "Enrolled successfully");
       setSelectedClassId("");
-      fetchAvailableClasses();
-      fetchEnrollments();
+      debouncedFetchClasses(search);
+      debouncedFetchEnrollments(search);
       fetchLecturers();
     } catch (err) {
-      showMessage("error", "Error enrolling: " + err.message);
+      showMessage("error", `Error enrolling: ${err.response?.data?.message || err.message}`);
     } finally {
       setLoading((prev) => ({ ...prev, enrollments: false }));
     }
   };
 
-  // Handle lecturer rating input changes
   const handleLecturerRatingChange = (lecturerId, field, value) => {
     setLecturerRatings((prev) => ({
       ...prev,
@@ -100,7 +112,6 @@ const StudentDashboard = () => {
     }));
   };
 
-  // Submit lecturer rating
   const submitLecturerRating = async (lecturerId) => {
     const { rating, comment } = lecturerRatings[lecturerId] || {};
     if (!rating || rating < 1 || rating > 5) {
@@ -118,7 +129,7 @@ const StudentDashboard = () => {
       handleLecturerRatingChange(lecturerId, "rating", "");
       handleLecturerRatingChange(lecturerId, "comment", "");
     } catch (err) {
-      showMessage("error", "Error submitting rating: " + err.message);
+      showMessage("error", `Error submitting rating: ${err.response?.data?.message || err.message}`);
     } finally {
       setLoading((prev) => ({ ...prev, lecturers: false }));
     }
@@ -132,10 +143,18 @@ const StudentDashboard = () => {
         </div>
       )}
 
-      {/* Enrollment Section */}
       <div className="card">
         <div className="card-header">Class Enrollment</div>
         <div className="card-body dashboard-section">
+          <div className="mb-3">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search classes..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
           <div className="mb-4">
             <h6 className="text-primary mb-3">Enroll in a New Class</h6>
             {loading.classes ? (
@@ -189,7 +208,6 @@ const StudentDashboard = () => {
         </div>
       </div>
 
-      {/* Lecturer Rating Section */}
       <div className="card">
         <div className="card-header">Rate Your Lecturers</div>
         <div className="card-body dashboard-section">
