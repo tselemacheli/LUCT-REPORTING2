@@ -38,6 +38,7 @@ const StudentDashboard = () => {
     setTimeout(() => setStateField(type, ''), duration);
   };
 
+  // Fetch available classes
   const fetchAvailableClasses = async () => {
     setLoadingField('classes', true);
     try {
@@ -50,6 +51,7 @@ const StudentDashboard = () => {
     }
   };
 
+  // Fetch enrolled classes
   const fetchEnrollments = async () => {
     setLoadingField('enrollments', true);
     try {
@@ -62,10 +64,11 @@ const StudentDashboard = () => {
     }
   };
 
+  // Fetch lecturers associated with student’s enrolled classes
   const fetchLecturers = async () => {
     setLoadingField('lecturers', true);
     try {
-      const res = await api.get('/my-lecturers');
+      const res = await api.get('/my-lecturers'); // Backend: GET /my-lecturers for students
       setStateField('lecturers', res.data || []);
     } catch (err) {
       showMessage('error', 'Error fetching lecturers: ' + (err.response?.data?.message || err.message));
