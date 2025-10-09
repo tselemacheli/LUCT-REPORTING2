@@ -5,22 +5,26 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const ExcelJS = require('exceljs');
+const path = require('path'); // Added for serving React frontend
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Updated database connection using a connection pool for better reliability
+// Serve React frontend static files (assumes 'build' folder from create-react-app)
+app.use(express.static(path.join(__dirname, 'build')));
+
+// Updated database connection using a connection pool
 const db = mysql.createPool({
   host: process.env.DB_HOST || 'sql12.freesqldatabase.com',
   user: process.env.DB_USER || 'sql12802067',
   password: process.env.DB_PASSWORD || '79DRrghTKQ',
   database: 'sql12802067',
   port: 3306,
-  connectionLimit: 10, // Adjust based on your needs
-  connectTimeout: 60000, // Valid option for connection timeout (ms)
-  waitForConnections: true, // Replaces 'reconnect' for connection pooling
-  queueLimit: 0 // Unlimited queued requests
+  connectionLimit: 10,
+  connectTimeout: 60000,
+  waitForConnections: true,
+  queueLimit: 0
 });
 
 // Test the connection pool
@@ -30,11 +34,12 @@ db.getConnection((err, connection) => {
     process.exit(1);
   }
   console.log('MySQL Connected to FreeSQLDatabase');
-  connection.release(); // Release the connection back to the pool
+  connection.release();
 });
 
 const SECRET = process.env.JWT_SECRET || 'your_secret_key'; // Use environment variable in production
 
+// Authentication middleware
 const authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided' });
@@ -333,11 +338,11 @@ app.get('/api/reports', authenticate, (req, res) => {
     if (err) {
       console.error('Fetch reports error:', err);
       if (err.code === 'ER_NO_SUCH_TABLE') {
-        return res.status(500).json({ message: 'Database table not found', error: err.message });
+        return res.status(500).json({ message: 'Database table not found' });
       } else if (err.code === 'ER_NO_REFERENCED_ROW') {
-        return res.status(400).json({ message: 'Invalid data reference', error: err.message });
+        return res.status(400).json({ message: 'Invalid data reference' });
       } else if (err.code === 'ER_SYNTAX_ERROR') {
-        return res.status(500).json({ message: 'Invalid SQL syntax', error: err.message });
+        return res.status(500).json({ message: 'Invalid SQL syntax' });
       }
       return res.status(500).json({ message: 'Error fetching reports', error: err.message });
     }
@@ -354,7 +359,7 @@ app.put('/api/reports/:id/feedback', authenticate, (req, res) => {
     if (err) {
       console.error('Add feedback error:', err);
       if (err.code === 'ER_NO_SUCH_TABLE') {
-        return res.status(500).json({ message: 'Database table not found', error: err.message });
+        return res.status(500).json({ message: 'Database table not found' });
       }
       return res.status(500).json({ message: 'Error adding feedback', error: err.message });
     }
@@ -468,13 +473,31 @@ app.post('/api/lecturer-ratings', authenticate, (req, res) => {
   );
 });
 
-// Get lecturer ratings for a lecturer (Lecturer)
+// Get lecturer ratings for a specific lecturer (Lecturer)
 app.get('/api/lecturer-ratings/:lecturerId', authenticate, (req, res) => {
   if (req.user.role !== 'lecturer' || req.user.id !== parseInt(req.params.lecturerId)) {
     return res.status(403).json({ message: 'Forbidden: Lecturers can only view their own ratings' });
   }
   db.query(
     'SELECT lr.*, u.name AS student_name FROM lecturer_ratings lr JOIN users u ON lr.student_id = u.id WHERE lr.lecturer_id = ?',
+    [req.params.lecturerId],
+    (err, results) => {
+      if (err) {
+        console.error('Fetch lecturer ratings error:', err);
+        return res.status(500).json({ message: 'Error fetching lecturer ratings', error: err.message });
+      }
+      res.json(results);
+    }
+  );
+});
+
+// Get lecturer ratings for a specific lecturer (Student)
+app.get('/api/lecturer-ratings/:lecturerId/student', authenticate, (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ message: 'Forbidden: Only students can view lecturer ratings' });
+  }
+  db.query(
+    'SELECT lr.*, u1.name AS lecturer_name, u2.name AS student_name FROM lecturer_ratings lr JOIN users u1 ON lr.lecturer_id = u1.id JOIN users u2 ON lr.student_id = u2.id WHERE lr.lecturer_id = ?',
     [req.params.lecturerId],
     (err, results) => {
       if (err) {
@@ -496,9 +519,6 @@ app.get('/api/lecturer-ratings', authenticate, (req, res) => {
     (err, results) => {
       if (err) {
         console.error('Fetch all lecturer ratings error:', err);
-        if (err.code === 'ER_NO_SUCH_TABLE') {
-          return res.status(500).json({ message: 'Database table not found', error: err.message });
-        }
         return res.status(500).json({ message: 'Error fetching lecturer ratings', error: err.message });
       }
       res.json(results);
@@ -572,7 +592,6 @@ app.post('/api/attendance', authenticate, (req, res) => {
     return res.status(400).json({ message: 'Class ID and date are required' });
   }
 
-  // Check if the student is enrolled in the class
   db.query(
     'SELECT * FROM enrollments WHERE student_id = ? AND class_id = ?',
     [req.user.id, classId],
@@ -585,7 +604,6 @@ app.post('/api/attendance', authenticate, (req, res) => {
         return res.status(400).json({ message: 'You are not enrolled in this class' });
       }
 
-      // Check if a report exists for the class and date
       db.query(
         'SELECT * FROM reports WHERE class_id = ? AND date_lecture = ?',
         [classId, date],
@@ -599,7 +617,6 @@ app.post('/api/attendance', authenticate, (req, res) => {
           if (reportResults.length > 0) {
             reportId = reportResults[0].id;
           } else {
-            // Create a new report if none exists
             db.query(
               'INSERT INTO reports (class_id, week, date_lecture, venue, scheduled_time, topic, learning_outcomes, recommendations, actual_present, total_registered) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
               [classId, 0, date, 'TBD', 'TBD', 'Student-marked attendance', '', '', 1, 1],
@@ -618,7 +635,6 @@ app.post('/api/attendance', authenticate, (req, res) => {
           insertAttendance();
 
           function insertAttendance() {
-            // Insert attendance record
             db.query(
               'INSERT IGNORE INTO attendance (report_id, student_id, present) VALUES (?, ?, ?)',
               [reportId, req.user.id, 1],
@@ -630,7 +646,6 @@ app.post('/api/attendance', authenticate, (req, res) => {
                   }
                   return res.status(500).json({ message: 'Error marking attendance', error: err.message });
                 }
-                // Update report's actual_present count
                 db.query(
                   'UPDATE reports SET actual_present = (SELECT COUNT(*) FROM attendance WHERE report_id = ? AND present = 1) WHERE id = ?',
                   [reportId, reportId],
@@ -651,5 +666,10 @@ app.post('/api/attendance', authenticate, (req, res) => {
   );
 });
 
-const PORT = process.env.PORT || 10000; // Updated to match Render logs
+// Catch-all route for React frontend (handles client-side routing)
+app.get(/^(?!\/api).*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
