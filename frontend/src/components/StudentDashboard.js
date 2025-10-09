@@ -1,164 +1,166 @@
-import React, { useState, useEffect } from 'react';
-import api from '../axiosConfig';
-import '../App.css';
+// src/components/StudentDashboard.jsx
+import React, { useState, useEffect } from "react";
+import api from "../api/api"; // Updated axios config
+import "../App.css";
 
 const StudentDashboard = () => {
-  const [state, setState] = useState({
-    classes: [],
-    enrollments: [],
-    lecturers: [],
-    classId: '',
-    lecturerRatings: {},
-    error: '',
-    success: ''
-  });
-
+  const [classes, setClasses] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
+  const [lecturers, setLecturers] = useState([]);
+  const [lecturerRatings, setLecturerRatings] = useState({});
+  const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState({
     classes: false,
     enrollments: false,
-    lecturers: false
+    lecturers: false,
   });
+  const [message, setMessage] = useState({ type: "", text: "" });
 
+  // Show messages
+  const showMessage = (type, text, duration = 3000) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: "", text: "" }), duration);
+  };
+
+  // Fetch available classes
+  const fetchAvailableClasses = async () => {
+    setLoading((prev) => ({ ...prev, classes: true }));
+    try {
+      const data = await api.get("/available-classes");
+      setClasses(data);
+    } catch (err) {
+      showMessage("error", "Error fetching classes: " + err.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, classes: false }));
+    }
+  };
+
+  // Fetch enrolled classes
+  const fetchEnrollments = async () => {
+    setLoading((prev) => ({ ...prev, enrollments: true }));
+    try {
+      const data = await api.get("/my-enrollments");
+      setEnrollments(data);
+    } catch (err) {
+      showMessage("error", "Error fetching enrollments: " + err.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, enrollments: false }));
+    }
+  };
+
+  // Fetch lecturers
+  const fetchLecturers = async () => {
+    setLoading((prev) => ({ ...prev, lecturers: true }));
+    try {
+      const data = await api.get("/my-lecturers");
+      setLecturers(data);
+    } catch (err) {
+      showMessage("error", "Error fetching lecturers: " + err.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, lecturers: false }));
+    }
+  };
+
+  // Initial load
   useEffect(() => {
     fetchAvailableClasses();
     fetchEnrollments();
     fetchLecturers();
   }, []);
 
-  const setStateField = (field, value) => setState(prev => ({ ...prev, [field]: value }));
-  const setLoadingField = (field, value) => setLoading(prev => ({ ...prev, [field]: value }));
-
-  const showMessage = (type, message, duration = 3000) => {
-    setStateField(type, message);
-    setTimeout(() => setStateField(type, ''), duration);
-  };
-
-  const fetchAvailableClasses = async () => {
-    setLoadingField('classes', true);
-    try {
-      const res = await api.get('/available-classes');
-      setStateField('classes', res.data || []);
-    } catch (err) {
-      showMessage('error', 'Error fetching classes: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setLoadingField('classes', false);
-    }
-  };
-
-  const fetchEnrollments = async () => {
-    setLoadingField('enrollments', true);
-    try {
-      const res = await api.get('/my-enrollments');
-      setStateField('enrollments', res.data || []);
-    } catch (err) {
-      showMessage('error', 'Error fetching enrollments: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setLoadingField('enrollments', false);
-    }
-  };
-
-  const fetchLecturers = async () => {
-    setLoadingField('lecturers', true);
-    try {
-      const res = await api.get('/my-lecturers');
-      setStateField('lecturers', res.data || []);
-    } catch (err) {
-      showMessage('error', 'Error fetching lecturers: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setLoadingField('lecturers', false);
-    }
-  };
-
+  // Enroll in class
   const handleEnroll = async () => {
-    if (!state.classId) {
-      showMessage('error', 'Please select a class to enroll');
+    if (!selectedClassId) {
+      showMessage("error", "Please select a class to enroll");
       return;
     }
-    setLoadingField('enrollments', true);
+    setLoading((prev) => ({ ...prev, enrollments: true }));
     try {
-      await api.post('/enroll', { classId: state.classId });
-      showMessage('success', 'Enrolled successfully');
-      setStateField('classId', '');
+      await api.post("/enroll", { classId: selectedClassId });
+      showMessage("success", "Enrolled successfully");
+      setSelectedClassId("");
       fetchAvailableClasses();
       fetchEnrollments();
       fetchLecturers();
     } catch (err) {
-      showMessage('error', 'Error enrolling: ' + (err.response?.data?.message || err.message));
+      showMessage("error", "Error enrolling: " + err.message);
     } finally {
-      setLoadingField('enrollments', false);
+      setLoading((prev) => ({ ...prev, enrollments: false }));
     }
   };
 
+  // Handle lecturer rating input changes
   const handleLecturerRatingChange = (lecturerId, field, value) => {
-    setStateField('lecturerRatings', {
-      ...state.lecturerRatings,
+    setLecturerRatings((prev) => ({
+      ...prev,
       [lecturerId]: {
-        ...state.lecturerRatings[lecturerId],
-        [field]: value
-      }
-    });
+        ...prev[lecturerId],
+        [field]: value,
+      },
+    }));
   };
 
+  // Submit lecturer rating
   const submitLecturerRating = async (lecturerId) => {
-    const { rating, comment } = state.lecturerRatings[lecturerId] || {};
+    const { rating, comment } = lecturerRatings[lecturerId] || {};
     if (!rating || rating < 1 || rating > 5) {
-      showMessage('error', 'Rating must be between 1 and 5');
+      showMessage("error", "Lecturer rating must be between 1 and 5");
       return;
     }
-    setLoadingField('lecturers', true);
+    setLoading((prev) => ({ ...prev, lecturers: true }));
     try {
-      await api.post('/lecturer-ratings', {
+      await api.post("/lecturer-ratings", {
         lecturerId,
         rating: Number(rating),
-        comment: comment || ''
+        comment: comment || "",
       });
-      showMessage('success', 'Lecturer rating submitted');
-      handleLecturerRatingChange(lecturerId, 'rating', '');
-      handleLecturerRatingChange(lecturerId, 'comment', '');
+      showMessage("success", "Lecturer rating submitted");
+      handleLecturerRatingChange(lecturerId, "rating", "");
+      handleLecturerRatingChange(lecturerId, "comment", "");
     } catch (err) {
-      showMessage('error', 'Error submitting lecturer rating: ' + (err.response?.data?.message || err.message));
+      showMessage("error", "Error submitting rating: " + err.message);
     } finally {
-      setLoadingField('lecturers', false);
+      setLoading((prev) => ({ ...prev, lecturers: false }));
     }
   };
-
-  const { classes, enrollments, lecturers, classId, lecturerRatings, error, success } = state;
 
   return (
     <div className="dashboard-grid">
-      {error && <div className="col-12"><div className="auth-error">{error}</div></div>}
-      {success && <div className="col-12"><div className="auth-success">{success}</div></div>}
+      {message.text && (
+        <div className={`col-12 ${message.type === "error" ? "auth-error" : "auth-success"}`}>
+          {message.text}
+        </div>
+      )}
 
       {/* Enrollment Section */}
       <div className="card">
-        <div className="card-header">
-          <i className="fas fa-book-open me-2"></i>
-          Class Enrollment
-        </div>
+        <div className="card-header">Class Enrollment</div>
         <div className="card-body dashboard-section">
           <div className="mb-4">
             <h6 className="text-primary mb-3">Enroll in a New Class</h6>
             {loading.classes ? (
-              <div className="loading"><div className="loading-spinner"></div></div>
+              <div className="loading-spinner"></div>
             ) : (
               <>
                 <select
-                  value={classId}
-                  onChange={(e) => setStateField('classId', e.target.value)}
                   className="form-control mb-3"
+                  value={selectedClassId}
+                  onChange={(e) => setSelectedClassId(e.target.value)}
                   disabled={loading.enrollments}
                 >
                   <option value="">Select Class</option>
-                  {classes.map(cl => (
-                    <option key={cl.id} value={cl.id}>{cl.name} - {cl.course_name}</option>
+                  {classes.map((cl) => (
+                    <option key={cl.id} value={cl.id}>
+                      {cl.name} - {cl.course_name}
+                    </option>
                   ))}
                 </select>
                 <button
-                  onClick={handleEnroll}
                   className="btn btn-primary w-100"
-                  disabled={loading.enrollments || !classId}
+                  onClick={handleEnroll}
+                  disabled={loading.enrollments || !selectedClassId}
                 >
-                  {loading.enrollments ? 'Enrolling...' : 'Enroll in Class'}
+                  {loading.enrollments ? "Enrolling..." : "Enroll in Class"}
                 </button>
               </>
             )}
@@ -167,13 +169,13 @@ const StudentDashboard = () => {
           <div>
             <h6 className="text-primary mb-3">Your Enrolled Classes</h6>
             {loading.enrollments ? (
-              <div className="loading"><div className="loading-spinner"></div></div>
+              <div className="loading-spinner"></div>
             ) : enrollments.length > 0 ? (
-              enrollments.map(enrollment => (
-                <div key={enrollment.id} className="card mb-2 border-primary">
+              enrollments.map((en) => (
+                <div className="card mb-2 border-primary" key={en.id}>
                   <div className="card-body py-2">
-                    <h6 className="mb-1">{enrollment.name}</h6>
-                    <small className="text-muted">{enrollment.course_name}</small>
+                    <h6>{en.name}</h6>
+                    <small className="text-muted">{en.course_name}</small>
                   </div>
                 </div>
               ))
@@ -189,46 +191,41 @@ const StudentDashboard = () => {
 
       {/* Lecturer Rating Section */}
       <div className="card">
-        <div className="card-header">
-          <i className="fas fa-star me-2"></i>
-          Rate Your Lecturers
-        </div>
+        <div className="card-header">Rate Your Lecturers</div>
         <div className="card-body dashboard-section">
           {loading.lecturers ? (
-            <div className="loading"><div className="loading-spinner"></div></div>
+            <div className="loading-spinner"></div>
           ) : lecturers.length > 0 ? (
-            lecturers.map(lecturer => (
-              <div key={lecturer.id} className="card mb-3 border-warning">
+            lecturers.map((lect) => (
+              <div key={lect.id} className="card mb-3 border-warning">
                 <div className="card-body">
-                  <h6 className="text-warning mb-3">Rate {lecturer.name}</h6>
+                  <h6 className="text-warning mb-3">Rate {lect.name}</h6>
                   <div className="row g-2 align-items-center">
                     <div className="col-md-3">
                       <input
                         type="number"
                         min="1"
                         max="5"
-                        value={lecturerRatings[lecturer.id]?.rating || ''}
-                        onChange={(e) => handleLecturerRatingChange(lecturer.id, 'rating', e.target.value)}
                         className="form-control"
                         placeholder="1-5"
-                        disabled={loading.lecturers}
+                        value={lecturerRatings[lect.id]?.rating || ""}
+                        onChange={(e) => handleLecturerRatingChange(lect.id, "rating", e.target.value)}
                       />
                     </div>
                     <div className="col-md-6">
                       <input
                         type="text"
-                        placeholder="Optional comment"
-                        value={lecturerRatings[lecturer.id]?.comment || ''}
-                        onChange={(e) => handleLecturerRatingChange(lecturer.id, 'comment', e.target.value)}
                         className="form-control"
-                        disabled={loading.lecturers}
+                        placeholder="Optional comment"
+                        value={lecturerRatings[lect.id]?.comment || ""}
+                        onChange={(e) => handleLecturerRatingChange(lect.id, "comment", e.target.value)}
                       />
                     </div>
                     <div className="col-md-3">
                       <button
-                        onClick={() => submitLecturerRating(lecturer.id)}
                         className="btn btn-warning w-100"
-                        disabled={loading.lecturers || !lecturerRatings[lecturer.id]?.rating}
+                        onClick={() => submitLecturerRating(lect.id)}
+                        disabled={loading.lecturers || !lecturerRatings[lect.id]?.rating}
                       >
                         Submit
                       </button>
