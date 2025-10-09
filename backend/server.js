@@ -10,22 +10,30 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'luct_reporting'
+// Updated database connection using a connection pool for better reliability
+const db = mysql.createPool({
+  host: process.env.DB_HOST || 'sql12.freesqldatabase.com',
+  user: process.env.DB_USER || 'sql12802067',
+  password: process.env.DB_PASSWORD || '79DRrghTKQ',
+  database: 'sql12802067',
+  port: 3306,
+  connectionLimit: 10, // Adjust based on your needs
+  connectTimeout: 60000, // Valid option for connection timeout (ms)
+  waitForConnections: true, // Replaces 'reconnect' for connection pooling
+  queueLimit: 0 // Unlimited queued requests
 });
 
-db.connect(err => {
+// Test the connection pool
+db.getConnection((err, connection) => {
   if (err) {
     console.error('Database connection error:', err);
     process.exit(1);
   }
-  console.log('MySQL Connected');
+  console.log('MySQL Connected to FreeSQLDatabase');
+  connection.release(); // Release the connection back to the pool
 });
 
-const SECRET = 'your_secret_key'; // Change this in production
+const SECRET = process.env.JWT_SECRET || 'your_secret_key'; // Use environment variable in production
 
 const authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -643,4 +651,5 @@ app.post('/api/attendance', authenticate, (req, res) => {
   );
 });
 
-app.listen(5000, () => console.log('Backend running on http://localhost:5000'));
+const PORT = process.env.PORT || 10000; // Updated to match Render logs
+app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
