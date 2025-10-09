@@ -25,20 +25,14 @@ const StudentDashboard = () => {
     fetchLecturers();
   }, []);
 
-  const setStateField = (field, value) => {
-    setState(prev => ({ ...prev, [field]: value }));
-  };
-
-  const setLoadingField = (field, value) => {
-    setLoading(prev => ({ ...prev, [field]: value }));
-  };
+  const setStateField = (field, value) => setState(prev => ({ ...prev, [field]: value }));
+  const setLoadingField = (field, value) => setLoading(prev => ({ ...prev, [field]: value }));
 
   const showMessage = (type, message, duration = 3000) => {
     setStateField(type, message);
     setTimeout(() => setStateField(type, ''), duration);
   };
 
-  // Fetch available classes
   const fetchAvailableClasses = async () => {
     setLoadingField('classes', true);
     try {
@@ -51,7 +45,6 @@ const StudentDashboard = () => {
     }
   };
 
-  // Fetch enrolled classes
   const fetchEnrollments = async () => {
     setLoadingField('enrollments', true);
     try {
@@ -64,11 +57,10 @@ const StudentDashboard = () => {
     }
   };
 
-  // Fetch lecturers associated with student’s enrolled classes
   const fetchLecturers = async () => {
     setLoadingField('lecturers', true);
     try {
-      const res = await api.get('/my-lecturers'); // Backend: GET /my-lecturers for students
+      const res = await api.get('/my-lecturers');
       setStateField('lecturers', res.data || []);
     } catch (err) {
       showMessage('error', 'Error fetching lecturers: ' + (err.response?.data?.message || err.message));
@@ -82,15 +74,14 @@ const StudentDashboard = () => {
       showMessage('error', 'Please select a class to enroll');
       return;
     }
-
     setLoadingField('enrollments', true);
     try {
       await api.post('/enroll', { classId: state.classId });
       showMessage('success', 'Enrolled successfully');
+      setStateField('classId', '');
       fetchAvailableClasses();
       fetchEnrollments();
       fetchLecturers();
-      setStateField('classId', '');
     } catch (err) {
       showMessage('error', 'Error enrolling: ' + (err.response?.data?.message || err.message));
     } finally {
@@ -110,12 +101,10 @@ const StudentDashboard = () => {
 
   const submitLecturerRating = async (lecturerId) => {
     const { rating, comment } = state.lecturerRatings[lecturerId] || {};
-    
     if (!rating || rating < 1 || rating > 5) {
-      showMessage('error', 'Lecturer rating must be between 1 and 5');
+      showMessage('error', 'Rating must be between 1 and 5');
       return;
     }
-
     setLoadingField('lecturers', true);
     try {
       await api.post('/lecturer-ratings', {
@@ -123,7 +112,6 @@ const StudentDashboard = () => {
         rating: Number(rating),
         comment: comment || ''
       });
-      
       showMessage('success', 'Lecturer rating submitted');
       handleLecturerRatingChange(lecturerId, 'rating', '');
       handleLecturerRatingChange(lecturerId, 'comment', '');
@@ -151,9 +139,7 @@ const StudentDashboard = () => {
           <div className="mb-4">
             <h6 className="text-primary mb-3">Enroll in a New Class</h6>
             {loading.classes ? (
-              <div className="loading">
-                <div className="loading-spinner"></div>
-              </div>
+              <div className="loading"><div className="loading-spinner"></div></div>
             ) : (
               <>
                 <select
@@ -163,10 +149,8 @@ const StudentDashboard = () => {
                   disabled={loading.enrollments}
                 >
                   <option value="">Select Class</option>
-                  {classes.map((cl) => (
-                    <option key={cl.id} value={cl.id}>
-                      {cl.name} - {cl.course_name}
-                    </option>
+                  {classes.map(cl => (
+                    <option key={cl.id} value={cl.id}>{cl.name} - {cl.course_name}</option>
                   ))}
                 </select>
                 <button
@@ -174,14 +158,7 @@ const StudentDashboard = () => {
                   className="btn btn-primary w-100"
                   disabled={loading.enrollments || !classId}
                 >
-                  {loading.enrollments ? (
-                    <>
-                      <div className="loading-spinner"></div>
-                      Enrolling...
-                    </>
-                  ) : (
-                    'Enroll in Class'
-                  )}
+                  {loading.enrollments ? 'Enrolling...' : 'Enroll in Class'}
                 </button>
               </>
             )}
@@ -190,12 +167,10 @@ const StudentDashboard = () => {
           <div>
             <h6 className="text-primary mb-3">Your Enrolled Classes</h6>
             {loading.enrollments ? (
-              <div className="loading">
-                <div className="loading-spinner"></div>
-              </div>
+              <div className="loading"><div className="loading-spinner"></div></div>
             ) : enrollments.length > 0 ? (
-              enrollments.map((enrollment) => (
-                <div className="card mb-2 border-primary" key={enrollment.id}>
+              enrollments.map(enrollment => (
+                <div key={enrollment.id} className="card mb-2 border-primary">
                   <div className="card-body py-2">
                     <h6 className="mb-1">{enrollment.name}</h6>
                     <small className="text-muted">{enrollment.course_name}</small>
@@ -220,16 +195,12 @@ const StudentDashboard = () => {
         </div>
         <div className="card-body dashboard-section">
           {loading.lecturers ? (
-            <div className="loading">
-              <div className="loading-spinner"></div>
-            </div>
+            <div className="loading"><div className="loading-spinner"></div></div>
           ) : lecturers.length > 0 ? (
-            lecturers.map((lecturer) => (
+            lecturers.map(lecturer => (
               <div key={lecturer.id} className="card mb-3 border-warning">
                 <div className="card-body">
-                  <h6 className="text-warning mb-3">
-                    Rate {lecturer.name}
-                  </h6>
+                  <h6 className="text-warning mb-3">Rate {lecturer.name}</h6>
                   <div className="row g-2 align-items-center">
                     <div className="col-md-3">
                       <input
